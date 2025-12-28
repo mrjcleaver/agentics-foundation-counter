@@ -18,15 +18,25 @@ from typing import Dict, List, Tuple
 class RedditAnalytics:
     """Analytics utility for tracking project mentions on Reddit."""
     
-    def __init__(self, search_term: str):
+    def __init__(self, search_term: str, use_reddit_api: bool = False):
         """
         Initialize the analytics utility.
         
         Args:
             search_term: The term to search for in Reddit posts and comments
+            use_reddit_api: If True, use Reddit's official API instead of Pushshift
         """
         self.search_term = search_term
-        self.base_url = "https://api.pushshift.io/reddit"
+        self.use_reddit_api = use_reddit_api
+        
+        if use_reddit_api:
+            # Reddit's official API endpoints
+            self.base_url = "https://www.reddit.com"
+        else:
+            # Pushshift API (archived data - may be unavailable)
+            # Note: Pushshift API was discontinued in 2023
+            # This is kept for historical compatibility
+            self.base_url = "https://api.pushshift.io/reddit"
         
     def get_month_timestamps(self, months_back: int = 24) -> List[Tuple[int, int, str]]:
         """
@@ -68,6 +78,13 @@ class RedditAnalytics:
         Returns:
             Count of submissions mentioning the search term
         """
+        if self.use_reddit_api:
+            return self._search_reddit_api_submissions(after, before)
+        else:
+            return self._search_pushshift_submissions(after, before)
+    
+    def _search_pushshift_submissions(self, after: int, before: int) -> int:
+        """Search using Pushshift API (may be unavailable)."""
         url = f"{self.base_url}/search/submission/"
         params = {
             'q': self.search_term,
@@ -93,6 +110,44 @@ class RedditAnalytics:
             print(f"Warning: Error parsing response: {e}", file=sys.stderr)
             return 0
     
+    def _search_reddit_api_submissions(self, after: int, before: int) -> int:
+        """
+        Search using Reddit's official API.
+        Note: This requires authentication for production use.
+        """
+        # Reddit's search API endpoint
+        url = f"{self.base_url}/search.json"
+        params = {
+            'q': self.search_term,
+            'type': 'link',
+            'limit': 100,
+            'sort': 'new'
+        }
+        headers = {
+            'User-Agent': 'Reddit Analytics Utility/1.0'
+        }
+        
+        try:
+            response = requests.get(url, params=params, headers=headers, timeout=10)
+            response.raise_for_status()
+            data = response.json()
+            
+            # Filter by time range and count
+            count = 0
+            if 'data' in data and 'children' in data['data']:
+                for post in data['data']['children']:
+                    created_utc = post['data'].get('created_utc', 0)
+                    if after <= created_utc <= before:
+                        count += 1
+            
+            return count
+        except requests.exceptions.RequestException as e:
+            print(f"Warning: Error fetching submissions: {e}", file=sys.stderr)
+            return 0
+        except (KeyError, json.JSONDecodeError) as e:
+            print(f"Warning: Error parsing response: {e}", file=sys.stderr)
+            return 0
+    
     def search_comments(self, after: int, before: int) -> int:
         """
         Search for mentions in Reddit comments for a time period.
@@ -104,6 +159,13 @@ class RedditAnalytics:
         Returns:
             Count of comments mentioning the search term
         """
+        if self.use_reddit_api:
+            return self._search_reddit_api_comments(after, before)
+        else:
+            return self._search_pushshift_comments(after, before)
+    
+    def _search_pushshift_comments(self, after: int, before: int) -> int:
+        """Search comments using Pushshift API (may be unavailable)."""
         url = f"{self.base_url}/search/comment/"
         params = {
             'q': self.search_term,
@@ -128,6 +190,19 @@ class RedditAnalytics:
         except (KeyError, json.JSONDecodeError) as e:
             print(f"Warning: Error parsing response: {e}", file=sys.stderr)
             return 0
+    
+    def _search_reddit_api_comments(self, after: int, before: int) -> int:
+        """
+        Search comments using Reddit's official API.
+        Note: Reddit's API doesn't provide direct comment search,
+        so this returns 0 (comments would need to be fetched from posts).
+        For full comment search, consider using PRAW or other Reddit libraries.
+        """
+        # Reddit's API doesn't support direct comment search
+        # This would require fetching posts and then comments from each
+        # For now, return 0 as a placeholder
+        print(f"Note: Comment search not available with Reddit API", file=sys.stderr)
+        return 0
     
     def analyze(self, months_back: int = 24, delay: float = 1.0) -> Dict:
         """
@@ -296,6 +371,12 @@ Examples:
         help='Delay between API calls in seconds (default: 1.0)'
     )
     
+    parser.add_argument(
+        '--use-reddit-api',
+        action='store_true',
+        help='Use Reddit\'s official API instead of Pushshift (limited functionality)'
+    )
+    
     args = parser.parse_args()
     
     # Validate arguments
@@ -305,7 +386,7 @@ Examples:
     
     # Run analysis
     try:
-        analyzer = RedditAnalytics(args.search_term)
+        analyzer = RedditAnalytics(args.search_term, use_reddit_api=args.use_reddit_api)
         results = analyzer.analyze(months_back=args.months, delay=args.delay)
         report = analyzer.format_report(results, output_format=args.format)
         

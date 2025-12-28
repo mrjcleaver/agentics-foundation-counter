@@ -63,6 +63,14 @@ Export results to CSV format:
 python reddit_analytics.py --format csv --output report.csv claude-flow
 ```
 
+### Use Reddit's Official API
+
+Use Reddit's official API (limited comment search):
+
+```bash
+python reddit_analytics.py --use-reddit-api claude-flow
+```
+
 ### Adjust Rate Limiting
 
 Change the delay between API calls (default is 1 second):
@@ -137,14 +145,20 @@ TOTAL,45,156
 
 ## Technical Details
 
-- **Data Source**: Pushshift API (Reddit Archive)
+- **Data Source**: Pushshift API (Reddit Archive) or Reddit's official API
+  - **Note**: Pushshift API was discontinued in 2023. The tool includes fallback support for Reddit's official API, though with more limited functionality (no comment search).
+  - For production use with Reddit's API, consider using the PRAW library for full functionality.
 - **Time Window**: Rolling 24-month window (configurable)
 - **Rate Limiting**: Built-in delays between API calls to respect rate limits
 - **Error Handling**: Graceful handling of API failures and network issues
 
 ## Limitations
 
-- Depends on the availability of the Pushshift API
+- **API Availability**: The Pushshift API was discontinued in 2023. The tool includes support for Reddit's official API as a fallback, but with limited functionality (no direct comment search).
+- For full functionality, consider:
+  - Using archived Pushshift data if available
+  - Implementing PRAW (Python Reddit API Wrapper) for comprehensive Reddit access
+  - Using alternative Reddit data sources
 - Historical data may have gaps depending on API coverage
 - Does not perform sentiment analysis
 - Rate limits may slow down queries for very large time windows
